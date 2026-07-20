@@ -88,9 +88,40 @@ function csvEscape(v) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function buildSummaryPrompt(cases) {
+  const rows = cases
+    .map((c) => `- ${c.CreatedDate} | ${c.category} | ${c.sentiment}/${c.urgency} | ${c.root_cause}`)
+    .join("\n");
+  return `You are a Revenue Operations analyst reviewing already-classified customer support cases for a consumer electronics company. Each line below is one case: date, category, sentiment/urgency, and a short root cause.
+
+Write the "Top emerging issues" for a leadership dashboard: the 3-5 most notable patterns (spikes, growing trends, or clusters worth acting on). For each: a short bold-worthy headline, then one or two sentences in plain business language explaining what's happening and why it matters. No technical jargon, no case IDs. Base it only on patterns actually visible in the data below — do not invent issues.
+
+Respond with ONLY a JSON array (no prose, no markdown fences), each item shaped as:
+{"headline": "<short headline>", "detail": "<1-2 sentence explanation>"}
+
+Cases:
+${rows}`;
+}
+
+async function generateSummary(cases) {
+  const message = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    messages: [{ role: "user", content: buildSummaryPrompt(cases) }],
+  });
+  const text = message.content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error("No JSON array found in summary response");
+  return JSON.parse(jsonMatch[0]);
+}
+
 async function main() {
   const inPath = path.join(process.cwd(), "public", "demo-cases.csv");
   const outPath = path.join(process.cwd(), "public", "demo-cases-classified.csv");
+  const summaryOutPath = path.join(process.cwd(), "public", "demo-summary.json");
   const csvText = fs.readFileSync(inPath, "utf8");
   const { data: rows, meta } = Papa.parse(csvText, { header: true, skipEmptyLines: true });
 
@@ -133,6 +164,20 @@ async function main() {
 
   fs.writeFileSync(outPath, lines.join("\n"), "utf8");
   console.log(`Wrote ${rows.length} classified cases to ${outPath} (${unclassified} unclassified)`);
+
+  const summaryInput = rows.map((row) => {
+    const c = classifications.get(row.CaseNumber);
+    return {
+      CreatedDate: row.CreatedDate,
+      category: c?.category ?? "Unclassified",
+      sentiment: c?.sentiment ?? "Neutral",
+      urgency: c?.urgency ?? "Low",
+      root_cause: c?.root_cause ?? "—",
+    };
+  });
+  const issues = await generateSummary(summaryInput);
+  fs.writeFileSync(summaryOutPath, JSON.stringify({ issues }, null, 2), "utf8");
+  console.log(`Wrote ${issues.length} top emerging issues to ${summaryOutPath}`);
 }
 
 main();

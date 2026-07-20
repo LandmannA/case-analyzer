@@ -1,0 +1,24 @@
+{
+  "issues": [
+    {
+      "headline": "Firmware 3.2 Causing Critical Device Failures",
+      "detail": "Starting in late May 2026, firmware version 3.2 has triggered a surge in software-related support cases, with customers reporting boot failures, display freezing, and constant reboots. This represents the fastest-growing category in recent weeks and is generating high-urgency, angry customer sentiment that threatens retention."
+    },
+    {
+      "headline": "Persistent Battery Performance Issues Across Multiple Products",
+      "detail": "Battery-related defects have been escalating since January, manifesting as premature drain when powered off, indicator sensor failures, and batteries dying well below specification levels. The pattern spans multiple product lines and includes both angry and neutral reports, suggesting a widespread hardware or firmware quality issue."
+    },
+    {
+      "headline": "Duplicate Billing Charges Creating Repeated Customer Friction",
+      "detail": "Duplicate charges on customer accounts have appeared consistently throughout the period with increasing anger levels in recent months, occurring at least 12+ times across billing cases. This systemic billing processing error is generating negative sentiment and requires immediate payment systems review."
+    },
+    {
+      "headline": "Warehouse and Shipping Delays Spiking in March-April",
+      "detail": "Packages stuck in warehouse reached a critical cluster in March 2026, with multiple angry-sentiment cases indicating orders trapped for extended periods without movement. This logistics bottleneck has since subsided but created a concentrated period of high customer frustration."
+    },
+    {
+      "headline": "Display Panel Dead Pixels Appearing as Recurring Hardware Defect",
+      "detail": "Dead pixels on display panels have been reported consistently from January through July across multiple products and cases, indicating either a manufacturing quality control issue or a product line vulnerability. While typically neutral sentiment, the recurring nature suggests a systemic hardware defect requiring investigation."
+    }
+  ]
+}

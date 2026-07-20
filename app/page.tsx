@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Papa from "papaparse";
+import Dashboard from "./Dashboard";
 
 const REQUIRED_COLUMNS = ["Subject", "Description"];
 const ROW_CAP = 300;
@@ -317,7 +318,11 @@ export default function Home() {
             </table>
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {allClassified && <Dashboard cases={cases} isDemoDataset={source.startsWith("Demo dataset")} />}
+
+      {cases.length === 0 && (
         !error && (
           <p className="empty-state">
             No cases loaded yet — click “Load demo data” above to see the tool in action.
