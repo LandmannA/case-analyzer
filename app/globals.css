@@ -135,6 +135,35 @@ body {
   color: var(--ink-muted);
 }
 
+.table-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.table-header-actions .btn-primary {
+  padding: 8px 18px;
+  font-size: 13px;
+}
+
+.demo-notice {
+  margin-top: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.progress-track {
+  height: 4px;
+  background: var(--accent-soft);
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
 .table-scroll {
   overflow-x: auto;
 }
