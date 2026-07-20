@@ -100,8 +100,21 @@ export default function Home() {
   const [source, setSource] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [tableExpanded, setTableExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const demoClassifiedCases = useRef<Case[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [sentimentFilter, setSentimentFilter] = useState("All");
+  const isDemoDataset = source.startsWith("Demo dataset");
   const allClassified = cases.length > 0 && cases.every((c) => !!c.category);
+
+  const categoryOptions = [...new Set(cases.map((c) => c.category).filter((v): v is string => !!v))];
+  const sentimentOptions = [...new Set(cases.map((c) => c.sentiment).filter((v): v is string => !!v))];
+  const filteredCases = cases.filter(
+    (c) =>
+      (categoryFilter === "All" || c.category === categoryFilter) &&
+      (sentimentFilter === "All" || c.sentiment === sentimentFilter)
+  );
 
   function applyParsed(parsed: ReturnType<typeof parseCsv>, sourceName: string) {
     if (parsed.error) {
@@ -113,6 +126,9 @@ export default function Home() {
     setError(null);
     setCases(parsed.cases);
     setSource(sourceName);
+    setCategoryFilter("All");
+    setSentimentFilter("All");
+    setTableExpanded(false);
     setInfo(
       parsed.capped
         ? `This file has more than ${ROW_CAP} rows — showing the first ${ROW_CAP} to keep analysis fast and affordable.`
@@ -125,7 +141,20 @@ export default function Home() {
       const res = await fetch("/demo-cases-classified.csv");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
-      applyParsed(parseCsv(text), "Demo dataset (pre-analyzed)");
+      const parsed = parseCsv(text);
+      if (parsed.error) {
+        applyParsed(parsed, "Demo dataset (pre-analyzed)");
+        return;
+      }
+      demoClassifiedCases.current = parsed.cases;
+      const unclassified = parsed.cases.map((c) => ({
+        ...c,
+        category: undefined,
+        root_cause: undefined,
+        sentiment: undefined,
+        urgency: undefined,
+      }));
+      applyParsed({ ...parsed, cases: unclassified }, "Demo dataset (pre-analyzed)");
     } catch {
       setError("Could not load the demo dataset. Please refresh the page and try again.");
     }
@@ -143,6 +172,17 @@ export default function Home() {
     setProgress(0);
     setError(null);
     setInfo(null);
+
+    if (isDemoDataset) {
+      for (const p of [25, 55, 80, 100]) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        setProgress(p);
+      }
+      setCases(demoClassifiedCases.current);
+      setAnalyzing(false);
+      setInfo(`Analysis complete: ${demoClassifiedCases.current.length} cases classified.`);
+      return;
+    }
 
     const batches = chunk(cases, BATCH_SIZE);
     const updated = [...cases];
@@ -245,19 +285,34 @@ export default function Home() {
 
       {cases.length > 0 ? (
         <div className="table-card">
-          <div className="table-header">
+          <div
+            className="table-header table-header-toggle"
+            onClick={() => setTableExpanded((v) => !v)}
+          >
             <h2>{source}</h2>
             <div className="table-header-actions">
-              <span>{cases.length} cases loaded</span>
-              {allClassified ? null : DEMO_MODE ? (
+              <span>
+                {filteredCases.length === cases.length
+                  ? `${cases.length} cases loaded`
+                  : `${filteredCases.length} of ${cases.length} cases`}
+              </span>
+              {allClassified ? null : isDemoDataset || !DEMO_MODE ? (
+                <button
+                  className="btn-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    analyzeCases();
+                  }}
+                  disabled={analyzing}
+                >
+                  {analyzing ? "Analyzing…" : "Analyze cases"}
+                </button>
+              ) : (
                 <span className="notice info demo-notice">
                   Live analysis is disabled in this public demo. Click &ldquo;Load demo data&rdquo; to see a fully analyzed dataset.
                 </span>
-              ) : (
-                <button className="btn-primary" onClick={analyzeCases} disabled={analyzing}>
-                  {analyzing ? "Analyzing…" : "Analyze cases"}
-                </button>
               )}
+              <span className="table-toggle-hint">{tableExpanded ? "Hide data ▲" : "Show data ▼"}</span>
             </div>
           </div>
           {analyzing && (
@@ -265,62 +320,101 @@ export default function Home() {
               <div className="progress-fill" style={{ width: `${progress}%` }} />
             </div>
           )}
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Case #</th>
-                  <th>Created</th>
-                  <th>Product</th>
-                  <th>Country</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Subject</th>
-                  <th>Description</th>
-                  <th>Category</th>
-                  <th>Root Cause</th>
-                  <th>Sentiment</th>
-                  <th>Urgency</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cases.map((c) => (
-                  <tr key={c.CaseNumber}>
-                    <td className="case-number">{c.CaseNumber}</td>
-                    <td className="case-number">{c.CreatedDate}</td>
-                    <td>{c.Product}</td>
-                    <td>{c.Country}</td>
-                    <td>
-                      <span className={`pill ${priorityClass(c.Priority)}`}>{c.Priority || "—"}</span>
-                    </td>
-                    <td>{c.Status}</td>
-                    <td className="subject">{c.Subject}</td>
-                    <td className="description">{c.Description}</td>
-                    <td>{c.category ?? "—"}</td>
-                    <td>{c.root_cause ?? "—"}</td>
-                    <td>
-                      {c.sentiment ? (
-                        <span className={`pill ${sentimentClass(c.sentiment)}`}>{c.sentiment}</span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      {c.urgency ? (
-                        <span className={`pill ${priorityClass(c.urgency)}`}>{c.urgency}</span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {!tableExpanded && (
+            <p className="table-collapsed-hint" onClick={() => setTableExpanded(true)}>
+              Table collapsed — click to view all {cases.length} cases.
+            </p>
+          )}
+          {tableExpanded && (
+            <>
+              {allClassified && (
+                <div className="table-filters">
+                  <label htmlFor="category-filter">Category</label>
+                  <select
+                    id="category-filter"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                  >
+                    <option value="All">All</option>
+                    {categoryOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="sentiment-filter">Sentiment</label>
+                  <select
+                    id="sentiment-filter"
+                    value={sentimentFilter}
+                    onChange={(e) => setSentimentFilter(e.target.value)}
+                  >
+                    <option value="All">All</option>
+                    {sentimentOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Case #</th>
+                      <th>Created</th>
+                      <th>Product</th>
+                      <th>Country</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                      <th>Subject</th>
+                      <th>Description</th>
+                      <th>Category</th>
+                      <th>Root Cause</th>
+                      <th>Sentiment</th>
+                      <th>Urgency</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCases.map((c) => (
+                      <tr key={c.CaseNumber}>
+                        <td className="case-number">{c.CaseNumber}</td>
+                        <td className="case-number">{c.CreatedDate}</td>
+                        <td>{c.Product}</td>
+                        <td>{c.Country}</td>
+                        <td>
+                          <span className={`pill ${priorityClass(c.Priority)}`}>{c.Priority || "—"}</span>
+                        </td>
+                        <td>{c.Status}</td>
+                        <td className="subject">{c.Subject}</td>
+                        <td className="description">{c.Description}</td>
+                        <td>{c.category ?? "—"}</td>
+                        <td>{c.root_cause ?? "—"}</td>
+                        <td>
+                          {c.sentiment ? (
+                            <span className={`pill ${sentimentClass(c.sentiment)}`}>{c.sentiment}</span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>
+                          {c.urgency ? (
+                            <span className={`pill ${priorityClass(c.urgency)}`}>{c.urgency}</span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       ) : null}
 
-      {allClassified && <Dashboard cases={cases} isDemoDataset={source.startsWith("Demo dataset")} />}
+      {allClassified && <Dashboard cases={cases} isDemoDataset={isDemoDataset} />}
 
       {cases.length === 0 && (
         !error && (
