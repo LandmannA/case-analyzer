@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { redactText, newCounts, type RedactionCounts } from "./redact";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -87,10 +88,25 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const cases: InputCase[] = body.cases;
+  const rawCases: InputCase[] = body.cases;
 
-  if (!Array.isArray(cases) || cases.length === 0) {
+  if (!Array.isArray(rawCases) || rawCases.length === 0) {
     return NextResponse.json({ error: "No cases provided" }, { status: 400 });
+  }
+
+  const counts: RedactionCounts = newCounts();
+  const cases: InputCase[] = rawCases.map((c) => ({
+    ...c,
+    Subject: redactText(c.Subject, counts),
+    Description: redactText(c.Description, counts),
+  }));
+  const total = counts.email + counts.phone + counts.order + counts.name;
+  console.log(
+    `[redact] batch of ${cases.length} cases — ${total} redactions ` +
+      `(emails: ${counts.email}, phones: ${counts.phone}, orders/serials: ${counts.order}, names: ${counts.name})`
+  );
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[redact] example redacted text sent to model:", cases[0]?.Description);
   }
 
   let results: Map<string, Classification>;
