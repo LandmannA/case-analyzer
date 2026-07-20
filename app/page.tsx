@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Papa from "papaparse";
 import Dashboard from "./Dashboard";
+import Articles from "./Articles";
 
 const REQUIRED_COLUMNS = ["Subject", "Description"];
 const ROW_CAP = 300;
@@ -167,6 +168,17 @@ export default function Home() {
     reader.readAsText(file);
   }
 
+  function exportCsv() {
+    const csv = Papa.unparse(cases);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "case-analysis-export.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function analyzeCases() {
     setAnalyzing(true);
     setProgress(0);
@@ -312,6 +324,17 @@ export default function Home() {
                   Live analysis is disabled in this public demo. Click &ldquo;Load demo data&rdquo; to see a fully analyzed dataset.
                 </span>
               )}
+              {allClassified && (
+                <button
+                  className="btn-secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    exportCsv();
+                  }}
+                >
+                  Export CSV
+                </button>
+              )}
               <span className="table-toggle-hint">{tableExpanded ? "Hide data ▲" : "Show data ▼"}</span>
             </div>
           </div>
@@ -415,6 +438,7 @@ export default function Home() {
       ) : null}
 
       {allClassified && <Dashboard cases={cases} isDemoDataset={isDemoDataset} />}
+      {allClassified && <Articles cases={cases} isDemoDataset={isDemoDataset} />}
 
       {cases.length === 0 && (
         !error && (
