@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -9,12 +9,15 @@ import {
   Legend,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { Case } from "./page";
+import { buildMonthlySeries, monthKey, monthLabel, publishedMonth, type Trend } from "./evolution";
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
@@ -47,10 +50,98 @@ const SENTIMENT_COLORS: Record<string, string> = {
   Angry: "#d03b3b",
 };
 
+const TOPIC_COLORS: Record<string, string> = {
+  "battery-drain": "#1baf7a",
+  "firmware-freeze": "#eb6834",
+  "shipping-delay": "#eda100",
+  "pairing-failure": "#2a78d6",
+};
+
 const GRID_COLOR = "#e1e0d9";
 const AXIS_COLOR = "#898781";
 
+// Statistical trend alone can't say *why* volume dropped — only that it did.
+// We only claim the knowledge-article generator gets the credit for topics
+// with a published article in PUBLISHED_ARTICLES (evolution.ts); otherwise a
+// decline is reported without guessing at the cause.
+function evolutionBadge(topicKey: string, trend: Trend): { label: string; className: string } {
+  const published = publishedMonth(topicKey);
+  if (published) {
+    const label = `Article published ${monthLabel(published)} — ${trend === "resolved" ? "deflected" : "monitoring"}`;
+    return { label, className: trend === "resolved" ? "deflected" : "steady" };
+  }
+  if (trend === "new") return { label: "New topic", className: "new-topic" };
+  if (trend === "rising") return { label: "Emerging — no article yet", className: "emerging" };
+  if (trend === "resolved") return { label: "Resolved", className: "resolved" };
+  if (trend === "falling") return { label: "Declining", className: "steady" };
+  return { label: "Steady", className: "steady" };
+}
+
 type Issue = { headline: string; detail: string };
+
+function StackIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+function AlertIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5" />
+      <path d="M12 16h.01" />
+    </svg>
+  );
+}
+function FlameIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3c1 3-3 4-3 8a3 3 0 0 0 6 0c0-1-1-2-1-2 2 1 3 3 3 5a5 5 0 0 1-10 0c0-4 3-6 5-11z" />
+    </svg>
+  );
+}
+function TrendIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 16l6-6 4 4 6-8" />
+      <path d="M14 6h6v6" />
+    </svg>
+  );
+}
+
+function KpiTile({
+  icon,
+  iconBg,
+  iconColor,
+  value,
+  label,
+  onClick,
+}: {
+  icon: ReactNode;
+  iconBg: string;
+  iconColor: string;
+  value: string;
+  label: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      className={onClick ? "kpi-tile kpi-tile-clickable" : "kpi-tile"}
+      style={{ borderTopColor: iconColor }}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+    >
+      <div className="kpi-icon" style={{ background: iconBg, color: iconColor }}>
+        {icon}
+      </div>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-label">{label}</div>
+      {onClick && <div className="kpi-tile-hint">View cases →</div>}
+    </div>
+  );
+}
 
 function weekStart(dateStr: string): string {
   const d = new Date(dateStr);
@@ -145,10 +236,23 @@ function CustomTooltip({
   );
 }
 
-export default function Dashboard({ cases, isDemoDataset }: { cases: Case[]; isDemoDataset: boolean }) {
+export default function Dashboard({
+  cases,
+  isDemoDataset,
+  onFilterHighUrgency,
+  onFilterNeedsArticleTopics,
+}: {
+  cases: Case[];
+  isDemoDataset: boolean;
+  onFilterHighUrgency?: () => void;
+  onFilterNeedsArticleTopics?: (topics: string[]) => void;
+}) {
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [issuesLoading, setIssuesLoading] = useState(false);
+
+  const maxMonth = cases.reduce((max, c) => (c.CreatedDate && monthKey(c.CreatedDate) > max ? monthKey(c.CreatedDate) : max), "");
+  const summaryFile = maxMonth > "2026-05" ? "/demo-summary-month2.json" : "/demo-summary-month1.json";
 
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +261,7 @@ export default function Dashboard({ cases, isDemoDataset }: { cases: Case[]; isD
 
     async function loadDemoSummary() {
       try {
-        const res = await fetch("/demo-summary.json");
+        const res = await fetch(summaryFile);
         if (!res.ok) throw new Error();
         const data = await res.json();
         if (!cancelled) setIssues(data.issues);
@@ -202,14 +306,71 @@ export default function Dashboard({ cases, isDemoDataset }: { cases: Case[]; isD
     return () => {
       cancelled = true;
     };
-  }, [cases, isDemoDataset]);
+  }, [cases, isDemoDataset, summaryFile]);
 
   const categoryData = buildCategoryData(cases);
   const sentimentData = buildSentimentData(cases);
   const { activeCategories, data: volumeData } = buildVolumeData(cases);
+  const { months: evolutionMonths, rows: evolutionRows } = isDemoDataset
+    ? buildMonthlySeries(cases)
+    : { months: [], rows: [] };
+
+  const totalCases = cases.length;
+  const negativeCount = cases.filter((c) => c.sentiment === "Negative" || c.sentiment === "Angry").length;
+  const negativePct = totalCases > 0 ? Math.round((negativeCount / totalCases) * 100) : 0;
+  const highUrgencyCount = cases.filter((c) => c.urgency === "High").length;
+  const attentionTopics = evolutionRows
+    .filter((r) => (r.trend === "new" || r.trend === "rising") && !publishedMonth(r.topicKey))
+    .map((r) => r.topicKey);
 
   return (
     <div className="dashboard">
+      <div className="dashboard-header">
+        <div>
+          <div className="dashboard-eyebrow">Overview</div>
+          <h2 className="dashboard-title">Case intelligence</h2>
+        </div>
+      </div>
+
+      <div className="kpi-row">
+        <KpiTile
+          icon={<StackIcon />}
+          iconBg="#dfe0ff"
+          iconColor="var(--accent)"
+          value={String(totalCases)}
+          label="Cases analyzed"
+        />
+        <KpiTile
+          icon={<AlertIcon />}
+          iconBg="#fce4bb"
+          iconColor="var(--warning)"
+          value={`${negativePct}%`}
+          label="Negative or angry sentiment"
+        />
+        <KpiTile
+          icon={<FlameIcon />}
+          iconBg="#fbd2d2"
+          iconColor="var(--critical)"
+          value={String(highUrgencyCount)}
+          label="High-urgency cases"
+          onClick={onFilterHighUrgency}
+        />
+        {isDemoDataset && (
+          <KpiTile
+            icon={<TrendIcon />}
+            iconBg="#c9f1c9"
+            iconColor="var(--good)"
+            value={String(attentionTopics.length)}
+            label="Topics needing an article"
+            onClick={
+              attentionTopics.length > 0 && onFilterNeedsArticleTopics
+                ? () => onFilterNeedsArticleTopics(attentionTopics)
+                : undefined
+            }
+          />
+        )}
+      </div>
+
       <div className="dashboard-grid">
         <div className="chart-card">
           <h3>Cases by category</h3>
@@ -233,26 +394,45 @@ export default function Dashboard({ cases, isDemoDataset }: { cases: Case[]; isD
 
         <div className="chart-card">
           <h3>Sentiment distribution</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={sentimentData} layout="vertical" margin={{ left: 8, right: 24 }}>
-              <CartesianGrid horizontal={false} stroke={GRID_COLOR} />
-              <XAxis type="number" tick={{ fill: AXIS_COLOR, fontSize: 12 }} axisLine={{ stroke: GRID_COLOR }} tickLine={false} allowDecimals={false} />
-              <YAxis
-                type="category"
-                dataKey="sentiment"
-                width={90}
-                tick={{ fill: "#52514e", fontSize: 12 }}
-                axisLine={{ stroke: GRID_COLOR }}
-                tickLine={false}
-              />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
-              <Bar dataKey="count" name="Cases" radius={[0, 4, 4, 0]} maxBarSize={20}>
-                {sentimentData.map((entry) => (
-                  <Cell key={entry.sentiment} fill={SENTIMENT_COLORS[entry.sentiment]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="donut-layout">
+            <div className="donut-chart">
+              <ResponsiveContainer width={180} height={180}>
+                <PieChart>
+                  <Pie
+                    data={sentimentData}
+                    dataKey="count"
+                    nameKey="sentiment"
+                    innerRadius={58}
+                    outerRadius={82}
+                    paddingAngle={2}
+                    stroke="#fff"
+                    strokeWidth={2}
+                  >
+                    {sentimentData.map((entry) => (
+                      <Cell key={entry.sentiment} fill={SENTIMENT_COLORS[entry.sentiment]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="donut-center">
+                <div className="donut-center-value">{totalCases}</div>
+                <div className="donut-center-label">cases</div>
+              </div>
+            </div>
+            <div className="donut-legend">
+              {sentimentData.map((entry) => (
+                <div key={entry.sentiment} className="donut-legend-row">
+                  <span className="donut-legend-dot" style={{ background: SENTIMENT_COLORS[entry.sentiment] }} />
+                  <span className="donut-legend-name">{entry.sentiment}</span>
+                  <span className="donut-legend-value">{entry.count}</span>
+                  <span className="donut-legend-pct">
+                    {totalCases > 0 ? Math.round((entry.count / totalCases) * 100) : 0}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="chart-card chart-card-wide">
@@ -289,6 +469,53 @@ export default function Dashboard({ cases, isDemoDataset }: { cases: Case[]; isD
           </ResponsiveContainer>
         </div>
       </div>
+
+      {evolutionRows.length > 0 && (
+        <div className="evolution-card">
+          <h3>Month-by-month evolution</h3>
+          <p className="evolution-subtitle">
+            How case volume shifted per topic across the selected time frame — and where a published
+            knowledge article has already helped.
+          </p>
+          <div className="evolution-table-scroll">
+            <table className="evolution-table">
+              <thead>
+                <tr>
+                  <th>Topic</th>
+                  {evolutionMonths.map((m) => (
+                    <th key={m} className="evolution-count">
+                      {monthLabel(m)}
+                    </th>
+                  ))}
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evolutionRows.map((row) => {
+                  const peak = Math.max(...row.counts);
+                  const badge = evolutionBadge(row.topicKey, row.trend);
+                  return (
+                    <tr key={row.topicKey}>
+                      <td className="evolution-topic">
+                        <span className="evolution-dot" style={{ background: TOPIC_COLORS[row.topicKey] ?? "#898781" }} />
+                        {row.label}
+                      </td>
+                      {row.counts.map((count, i) => (
+                        <td key={evolutionMonths[i]} className={`evolution-count${count === peak && count > 0 ? " evolution-peak" : ""}`}>
+                          {count}
+                        </td>
+                      ))}
+                      <td>
+                        <span className={`evo-badge ${badge.className}`}>{badge.label}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="issues-card">
         <h3>Top emerging issues</h3>

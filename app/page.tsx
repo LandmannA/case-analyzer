@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Papa from "papaparse";
 import Dashboard from "./Dashboard";
 import Articles from "./Articles";
+import { monthKey, monthLabel } from "./evolution";
 
 const REQUIRED_COLUMNS = ["Subject", "Description"];
 const ROW_CAP = 300;
@@ -19,6 +20,7 @@ export type Case = {
   Priority: string;
   Status: string;
   CreatedDate: string;
+  Topic?: string;
   category?: string;
   root_cause?: string;
   sentiment?: string;
@@ -61,6 +63,7 @@ function parseCsv(csvText: string): { cases: Case[]; error?: string; capped?: bo
     Priority: r.Priority ?? "",
     Status: r.Status ?? "",
     CreatedDate: r.CreatedDate ?? "",
+    Topic: r.Topic || undefined,
     category: r.category || undefined,
     root_cause: r.root_cause || undefined,
     sentiment: r.sentiment || undefined,
@@ -69,6 +72,49 @@ function parseCsv(csvText: string): { cases: Case[]; error?: string; capped?: bo
 
   return { cases, capped };
 }
+
+const STEPS = [
+  {
+    title: "Load your cases",
+    detail: "Click “Load demo data” below, or upload your own Salesforce case export (.csv).",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+        <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+      </svg>
+    ),
+  },
+  {
+    title: "AI classifies every case",
+    detail: "Category, sentiment, urgency, and root cause — assigned automatically in seconds.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
+  },
+  {
+    title: "Explore the dashboard",
+    detail: "See category and sentiment breakdowns, volume trends, and month-by-month evolution.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19V9M11 19V5M18 19v-7" />
+      </svg>
+    ),
+  },
+  {
+    title: "Act on the suggestions",
+    detail: "See exactly which topics need a knowledge article, and the measured impact of ones already published.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 3v5a1 1 0 0 0 1 1h5" />
+        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+        <path d="M9 13h6M9 17h6" />
+      </svg>
+    ),
+  },
+];
 
 function priorityClass(priority: string): string {
   const p = priority.toLowerCase();
@@ -103,19 +149,42 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [tableExpanded, setTableExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   const demoClassifiedCases = useRef<Case[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [sentimentFilter, setSentimentFilter] = useState("All");
+  const [fromMonth, setFromMonth] = useState("");
+  const [toMonth, setToMonth] = useState("");
+  const [quickFilter, setQuickFilter] = useState<
+    { type: "urgency"; label: string } | { type: "topics"; topics: string[]; label: string } | null
+  >(null);
   const isDemoDataset = source.startsWith("Demo dataset");
   const allClassified = cases.length > 0 && cases.every((c) => !!c.category);
 
+  const monthOptions = [...new Set(cases.filter((c) => c.CreatedDate).map((c) => monthKey(c.CreatedDate)))].sort();
+  const effectiveFrom = fromMonth || monthOptions[0] || "";
+  const effectiveTo = toMonth || monthOptions[monthOptions.length - 1] || "";
+  const rangeFilteredCases = cases.filter((c) => {
+    if (!c.CreatedDate) return true;
+    const m = monthKey(c.CreatedDate);
+    return m >= effectiveFrom && m <= effectiveTo;
+  });
+
   const categoryOptions = [...new Set(cases.map((c) => c.category).filter((v): v is string => !!v))];
   const sentimentOptions = [...new Set(cases.map((c) => c.sentiment).filter((v): v is string => !!v))];
-  const filteredCases = cases.filter(
+  const filteredCases = rangeFilteredCases.filter(
     (c) =>
       (categoryFilter === "All" || c.category === categoryFilter) &&
-      (sentimentFilter === "All" || c.sentiment === sentimentFilter)
+      (sentimentFilter === "All" || c.sentiment === sentimentFilter) &&
+      (!quickFilter ||
+        (quickFilter.type === "urgency" ? c.urgency === "High" : quickFilter.topics.includes(c.Topic ?? "")))
   );
+
+  function applyQuickFilter(filter: NonNullable<typeof quickFilter>) {
+    setQuickFilter(filter);
+    setTableExpanded(true);
+    tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function applyParsed(parsed: ReturnType<typeof parseCsv>, sourceName: string) {
     if (parsed.error) {
@@ -129,6 +198,9 @@ export default function Home() {
     setSource(sourceName);
     setCategoryFilter("All");
     setSentimentFilter("All");
+    setFromMonth("");
+    setToMonth("");
+    setQuickFilter(null);
     setTableExpanded(false);
     setInfo(
       parsed.capped
@@ -139,23 +211,28 @@ export default function Home() {
 
   async function loadDemoData() {
     try {
-      const res = await fetch("/demo-cases-classified.csv");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const parsed = parseCsv(text);
-      if (parsed.error) {
-        applyParsed(parsed, "Demo dataset (pre-analyzed)");
+      const [res1, res2] = await Promise.all([
+        fetch("/demo-cases-month1-classified.csv"),
+        fetch("/demo-cases-month2-classified.csv"),
+      ]);
+      if (!res1.ok || !res2.ok) throw new Error("HTTP error");
+      const [text1, text2] = await Promise.all([res1.text(), res2.text()]);
+      const parsed1 = parseCsv(text1);
+      const parsed2 = parseCsv(text2);
+      if (parsed1.error || parsed2.error) {
+        applyParsed(parsed1.error ? parsed1 : parsed2, "Demo dataset (pre-analyzed)");
         return;
       }
-      demoClassifiedCases.current = parsed.cases;
-      const unclassified = parsed.cases.map((c) => ({
+      const combined = [...parsed1.cases, ...parsed2.cases];
+      demoClassifiedCases.current = combined;
+      const unclassified = combined.map((c) => ({
         ...c,
         category: undefined,
         root_cause: undefined,
         sentiment: undefined,
         urgency: undefined,
       }));
-      applyParsed({ ...parsed, cases: unclassified }, "Demo dataset (pre-analyzed)");
+      applyParsed({ cases: unclassified }, "Demo dataset (pre-analyzed)");
     } catch {
       setError("Could not load the demo dataset. Please refresh the page and try again.");
     }
@@ -253,17 +330,24 @@ export default function Home() {
 
   return (
     <main className="container">
-      <div className="hero">
-        <span className="badge">Portfolio demo · synthetic data only</span>
-        <h1>Salesforce Case Analyzer</h1>
-        <p className="tagline">
-          Support teams drown in unstructured cases. This tool reads them like an analyst would —
-          classifying every case, spotting trends, and drafting the knowledge articles that prevent
-          repeat tickets.
-        </p>
-      </div>
+      {cases.length === 0 ? (
+        <div className="hero">
+          <span className="badge">Portfolio demo · synthetic data only</span>
+          <h1>Salesforce Case Analyzer</h1>
+          <p className="tagline">
+            Support teams drown in unstructured cases. This tool reads them like an analyst would —
+            classifying every case, spotting trends, and telling you exactly which knowledge article
+            would prevent the most repeat tickets.
+          </p>
+        </div>
+      ) : (
+        <div className="hero-compact">
+          <span className="hero-compact-title">Salesforce Case Analyzer</span>
+          <span className="badge badge-compact">Synthetic data only</span>
+        </div>
+      )}
 
-      <div className="actions">
+      <div className={cases.length === 0 ? "actions" : "actions actions-compact"}>
         <button className="btn-primary" onClick={loadDemoData}>
           Load demo data
         </button>
@@ -292,11 +376,58 @@ export default function Home() {
         />
       </div>
 
+      {cases.length === 0 && (
+        <div className="steps-row">
+          {STEPS.map((step, i) => (
+            <div key={step.title} className="step-card">
+              <div className="step-number">{i + 1}</div>
+              <div className="step-icon">{step.icon}</div>
+              <h3>{step.title}</h3>
+              <p>{step.detail}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {error && <div className="notice error">{error}</div>}
       {info && <div className="notice info">{info}</div>}
 
+      {allClassified && monthOptions.length > 1 && (
+        <div className="timeframe-bar">
+          <div className="timeframe-eyebrow">Time frame</div>
+          <div className="timeframe-controls">
+            <select value={effectiveFrom} onChange={(e) => setFromMonth(e.target.value)}>
+              {monthOptions.map((m) => (
+                <option key={m} value={m} disabled={m > effectiveTo}>
+                  {monthLabel(m)} {m.slice(0, 4)}
+                </option>
+              ))}
+            </select>
+            <span className="timeframe-arrow">→</span>
+            <select value={effectiveTo} onChange={(e) => setToMonth(e.target.value)}>
+              {monthOptions.map((m) => (
+                <option key={m} value={m} disabled={m < effectiveFrom}>
+                  {monthLabel(m)} {m.slice(0, 4)}
+                </option>
+              ))}
+            </select>
+            {(fromMonth || toMonth) && (
+              <button
+                className="timeframe-reset"
+                onClick={() => {
+                  setFromMonth("");
+                  setToMonth("");
+                }}
+              >
+                Reset to all time
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {cases.length > 0 ? (
-        <div className="table-card">
+        <div className="table-card" ref={tableRef}>
           <div
             className="table-header table-header-toggle"
             onClick={() => setTableExpanded((v) => !v)}
@@ -378,6 +509,14 @@ export default function Home() {
                       </option>
                     ))}
                   </select>
+                  {quickFilter && (
+                    <span className="quick-filter-chip">
+                      {quickFilter.label}
+                      <button type="button" onClick={() => setQuickFilter(null)} aria-label="Clear filter">
+                        ×
+                      </button>
+                    </span>
+                  )}
                 </div>
               )}
               <div className="table-scroll">
@@ -437,8 +576,17 @@ export default function Home() {
         </div>
       ) : null}
 
-      {allClassified && <Dashboard cases={cases} isDemoDataset={isDemoDataset} />}
-      {allClassified && <Articles cases={cases} isDemoDataset={isDemoDataset} />}
+      {allClassified && (
+        <Dashboard
+          cases={rangeFilteredCases}
+          isDemoDataset={isDemoDataset}
+          onFilterHighUrgency={() => applyQuickFilter({ type: "urgency", label: "High-urgency cases" })}
+          onFilterNeedsArticleTopics={(topics) =>
+            applyQuickFilter({ type: "topics", topics, label: "Topics needing an article" })
+          }
+        />
+      )}
+      {allClassified && <Articles cases={rangeFilteredCases} isDemoDataset={isDemoDataset} />}
 
       {cases.length === 0 && (
         !error && (

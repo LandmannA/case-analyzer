@@ -1,0 +1,12 @@
+{
+  "issues": [
+    {
+      "headline": "Lumina OLED firmware freeze — critical new defect",
+      "detail": "This issue emerged suddenly in May with 4 cases and represents a previously unseen product failure mode. Immediate investigation and customer communication are needed to determine scope and whether a firmware rollback or patch is required."
+    },
+    {
+      "headline": "AeroSnap X200 battery drain — stabilizing after KB article",
+      "detail": "Cases peaked at 8 in May but dropped to 0 in June following publication of a knowledge article, indicating the self-service content is effectively resolving customer issues. Continued monitoring will confirm if the trend holds in coming months."
+    }
+  ]
+}

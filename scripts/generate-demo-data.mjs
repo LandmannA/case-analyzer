@@ -1,11 +1,24 @@
-// Generates public/demo-cases.csv — 150 synthetic consumer-electronics support cases.
+// Generates two waves of synthetic consumer-electronics support cases so the demo
+// can show month-over-month evolution:
+//   public/demo-cases-month1.csv        (baseline period)
+//   public/demo-cases-month2-delta.csv  (a later period, loaded on top of month 1)
 // All names/emails are obviously fictional. Run with: npm run generate-demo-data
 //
-// Planted trends (so the dashboard has a story to tell):
-//  1. Firmware update v3.2 causing Lumina OLED TVs to freeze — spikes hard in the last ~5 weeks
-//  2. AeroSnap X200 camera battery-drain complaints — building steadily over the whole period
-//  3. Shipping delays from the Rotterdam warehouse — a cluster in March
-//  4. Normal background noise: billing, warranty, how-to, misc defects
+// Each case carries a ground-truth `Topic` column that is NOT sent to the AI
+// classifier — it's only used by our own dashboard code to compute the
+// evolution story deterministically (no LLM guesswork about whether two
+// differently-worded root causes are "the same issue").
+//
+// Planted story:
+//  - battery-drain    (AeroSnap X200): heavy in month 1, nearly disappears in
+//                      month 2 — the "a knowledge article deflected this" case.
+//  - firmware-freeze  (Lumina OLED v3.2): a few early whispers in month 1,
+//                      a hard spike in month 2 — "emerging issue, no article yet".
+//  - shipping-delay   (Rotterdam warehouse): a March cluster in month 1, zero
+//                      in month 2 — resolved operationally, not via an article.
+//  - pairing-failure  (SoundWave Bar app update): zero in month 1, appears
+//                      only in month 2 — a brand-new topic.
+//  - noise: everything else, steady background rate in both periods.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -23,8 +36,10 @@ function randInt(min, max) {
   return min + Math.floor(rand() * (max - min + 1));
 }
 
-const START = new Date("2026-01-12");
-const END = new Date("2026-07-15");
+const MONTH1_START = new Date("2026-01-12");
+const MONTH1_END = new Date("2026-05-31");
+const MONTH2_START = new Date("2026-06-01");
+const MONTH2_END = new Date("2026-07-15");
 
 function randomDate(from, to) {
   const t = from.getTime() + rand() * (to.getTime() - from.getTime());
@@ -75,7 +90,7 @@ function person() {
 // --- Case builders -------------------------------------------------------
 
 let caseCounter = 5001;
-function makeCase({ subject, description, product, country, priority, status, date }) {
+function makeCase({ subject, description, product, country, priority, status, date, topic }) {
   return {
     CaseNumber: String(caseCounter++).padStart(8, "0"),
     Subject: subject,
@@ -85,12 +100,12 @@ function makeCase({ subject, description, product, country, priority, status, da
     Priority: priority,
     Status: status ?? pick(["New", "In Progress", "In Progress", "Escalated", "Closed", "Closed"]),
     CreatedDate: date,
+    Topic: topic,
   };
 }
 
-const cases = [];
+// --- Trend definitions -----------------------------------------------------
 
-// --- Trend 1: firmware v3.2 freezing Lumina OLED TVs (28 cases, mostly June 10 – July 15)
 const firmwareSubjects = [
   "TV frozen after firmware update",
   "Lumina OLED unresponsive since update 3.2",
@@ -104,21 +119,18 @@ const firmwareBodies = [
   (p) => `${pick(politeOpeners)} After the automatic software update (version 3.2) my TV gets stuck on the startup logo and never reaches the menu. A factory reset did not help. Is there a way to roll back to the previous firmware? My serial is ${serial()}. Thank you, ${p[0]}`,
   (p) => `${pick(angryOpeners)} Update 3.2 has effectively bricked my Lumina OLED. The screen freezes within minutes of turning it on. I want a fix or a replacement immediately. You can reach me at ${fakePhone()}. ${p[0]}`,
 ];
-for (let i = 0; i < 28; i++) {
+function makeFirmwareCase(date) {
   const p = person();
-  const early = i < 5; // a few early reports before the spike
-  cases.push(
-    makeCase({
-      subject: pick(firmwareSubjects),
-      description: pick(firmwareBodies)(p),
-      product: pick(['Lumina 55" OLED TV', 'Lumina 65" OLED TV']),
-      priority: pick(["High", "High", "Medium"]),
-      date: early ? randomDate(new Date("2026-05-25"), new Date("2026-06-09")) : randomDate(new Date("2026-06-10"), END),
-    })
-  );
+  return makeCase({
+    subject: pick(firmwareSubjects),
+    description: pick(firmwareBodies)(p),
+    product: pick(['Lumina 55" OLED TV', 'Lumina 65" OLED TV']),
+    priority: pick(["High", "High", "Medium"]),
+    date,
+    topic: "firmware-freeze",
+  });
 }
 
-// --- Trend 2: AeroSnap X200 battery drain (22 cases, steady growth across the period)
 const batterySubjects = [
   "X200 battery drains overnight",
   "Camera battery life much worse than advertised",
@@ -130,22 +142,18 @@ const batteryBodies = [
   (p) => `${pick(politeOpeners)} The spec sheet promises 400 shots per charge but I barely get 120 before the X200 dies. Firmware is up to date. Order ${order()}. Could this be a hardware fault? Kind regards, ${p[0]} (${p[1]})`,
   (p) => `${pick(angryOpeners)} My X200 shuts itself down claiming empty battery while the indicator still shows 40%. This has ruined two family events already. I expect a proper solution, not another troubleshooting checklist. ${p[0]}`,
 ];
-for (let i = 0; i < 22; i++) {
+function makeBatteryCase(date) {
   const p = person();
-  // weight dates towards the later months to show growth
-  const d = rand() < 0.4 ? randomDate(START, new Date("2026-04-15")) : randomDate(new Date("2026-04-16"), END);
-  cases.push(
-    makeCase({
-      subject: pick(batterySubjects),
-      description: pick(batteryBodies)(p),
-      product: "AeroSnap X200 Camera",
-      priority: pick(["Medium", "Medium", "High", "Low"]),
-      date: d,
-    })
-  );
+  return makeCase({
+    subject: pick(batterySubjects),
+    description: pick(batteryBodies)(p),
+    product: "AeroSnap X200 Camera",
+    priority: pick(["Medium", "Medium", "High", "Low"]),
+    date,
+    topic: "battery-drain",
+  });
 }
 
-// --- Trend 3: Rotterdam warehouse shipping delays (15 cases clustered in March)
 const shippingSubjects = [
   "Order not delivered after 3 weeks",
   "Where is my order?",
@@ -157,21 +165,66 @@ const shippingBodies = [
   (p) => `${pick(angryOpeners)} Order ${order()} was promised in 3-5 working days. It has now been 19 days and the tracking has not moved from your Rotterdam warehouse. Either ship it this week or refund me. ${p[0]}, ${p[1]}`,
   (p) => `${pick(politeOpeners)} My delivery keeps getting postponed — the app has changed the delivery date four times now. The parcel appears stuck in Rotterdam. Please investigate order ${order()}. Regards, ${p[0]}`,
 ];
-for (let i = 0; i < 15; i++) {
+function makeShippingCase(date) {
   const p = person();
-  cases.push(
-    makeCase({
-      subject: pick(shippingSubjects),
-      description: pick(shippingBodies)(p),
-      product: pick(["FrostCore Fridge-Freezer", "SoundWave Bar 300", 'Lumina 43" LED TV', "CycloneVac V8"]),
-      country: pick(["Netherlands", "Germany", "France", "Belgium"]),
-      priority: pick(["Medium", "High"]),
-      date: randomDate(new Date("2026-03-01"), new Date("2026-03-31")),
-    })
-  );
+  return makeCase({
+    subject: pick(shippingSubjects),
+    description: pick(shippingBodies)(p),
+    product: pick(["FrostCore Fridge-Freezer", "SoundWave Bar 300", 'Lumina 43" LED TV', "CycloneVac V8"]),
+    country: pick(["Netherlands", "Germany", "France", "Belgium"]),
+    priority: pick(["Medium", "High"]),
+    date,
+    topic: "shipping-delay",
+  });
 }
 
-// --- Background noise: 85 cases across categories, spread over the whole period
+const pairingSubjects = [
+  "SoundWave Bar loses Bluetooth pairing after app update",
+  "Soundbar disconnects every few minutes since app update 2.4",
+  "Cannot re-pair SoundWave Bar after updating the companion app",
+  "Bluetooth connection drops constantly since latest app version",
+];
+const pairingBodies = [
+  (p) => `${pick(politeOpeners)} Since updating the SoundWave companion app to version 2.4 last week, my SoundWave Bar 300 disconnects from Bluetooth every few minutes and I have to re-pair it manually. It worked fine before the update. Any idea what's going on? Regards, ${p[0]}`,
+  (p) => `${pick(angryOpeners)} The app update 2.4 has completely broken Bluetooth pairing on my soundbar. It connects for a minute then drops, over and over. I have tried deleting and reinstalling the app twice. ${p[0]}, ${p[1]}`,
+  (p) => `${pick(politeOpeners)} After the recent app update my SoundWave Bar 300 no longer stays paired with my phone — it shows "connected" then immediately disconnects. Is this a known issue with app version 2.4? Thanks, ${p[0]}`,
+];
+function makePairingCase(date) {
+  const p = person();
+  return makeCase({
+    subject: pick(pairingSubjects),
+    description: pick(pairingBodies)(p),
+    product: "SoundWave Bar 300",
+    priority: pick(["Medium", "Low"]),
+    date,
+    topic: "pairing-failure",
+  });
+}
+
+const compressorSubjects = [
+  "Loud grinding noise from fridge compressor",
+  "FrostCore making clicking noise every few minutes",
+  "New buzzing sound from fridge motor",
+];
+const compressorBodies = [
+  (p) => `${pick(politeOpeners)} My FrostCore fridge-freezer started making a loud grinding noise from the back of the unit about a week ago. It happens every few minutes and is loud enough to hear from another room. The unit is only 3 months old. Is this a known compressor issue? ${p[0]}`,
+  (p) => `${pick(politeOpeners)} There is a new clicking/buzzing noise coming from my FrostCore's compressor that started this week — it wasn't there before. The fridge still cools normally. Should I be worried? Serial ${serial()}. Regards, ${p[0]}`,
+  (p) => `${pick(angryOpeners)} My brand new FrostCore fridge-freezer has developed a loud grinding compressor noise out of nowhere. This is unacceptable for a unit I bought recently. ${p[0]}, ${p[1]}`,
+];
+function makeCompressorCase(date) {
+  const p = person();
+  return makeCase({
+    subject: pick(compressorSubjects),
+    description: pick(compressorBodies)(p),
+    product: "FrostCore Fridge-Freezer",
+    priority: pick(["Medium", "Low"]),
+    date,
+    topic: "compressor-noise",
+  });
+}
+
+// --- Background noise ------------------------------------------------------
+
 const noiseTemplates = [
   // how-to questions
   () => {
@@ -270,34 +323,87 @@ const noiseTemplates = [
   },
 ];
 
-for (let i = 0; i < 85; i++) {
+function makeNoiseCase(date) {
   const t = pick(noiseTemplates)();
-  cases.push(
-    makeCase({
-      ...t,
-      date: randomDate(START, END),
-    })
-  );
+  return makeCase({ ...t, date, topic: "noise" });
 }
 
-// Shuffle so trends aren't grouped in the file, then sort by date for realism
-cases.sort((a, b) => (a.CreatedDate < b.CreatedDate ? -1 : 1));
-// Re-number after sorting so case numbers roughly follow dates (like real Salesforce)
-let n = 5001;
-for (const c of cases) c.CaseNumber = String(n++).padStart(8, "0");
+// --- Build Month 1 -----------------------------------------------------
 
-// --- Write CSV -----------------------------------------------------------
-const headers = ["CaseNumber", "Subject", "Description", "Product", "Country", "Priority", "Status", "CreatedDate"];
+const month1 = [];
+
+// battery-drain: 18 cases, growing across the period
+for (let i = 0; i < 18; i++) {
+  const d = rand() < 0.35 ? randomDate(MONTH1_START, new Date("2026-03-31")) : randomDate(new Date("2026-04-01"), MONTH1_END);
+  month1.push(makeBatteryCase(d));
+}
+
+// firmware-freeze: 4 early whispers
+for (let i = 0; i < 4; i++) {
+  month1.push(makeFirmwareCase(randomDate(new Date("2026-05-10"), MONTH1_END)));
+}
+
+// shipping-delay: 15 cases clustered in March
+for (let i = 0; i < 15; i++) {
+  month1.push(makeShippingCase(randomDate(new Date("2026-03-01"), new Date("2026-03-31"))));
+}
+
+// noise: 70 cases spread across the whole period
+for (let i = 0; i < 70; i++) {
+  month1.push(makeNoiseCase(randomDate(MONTH1_START, MONTH1_END)));
+}
+
+// --- Build Month 2 delta -------------------------------------------------
+
+const month2 = [];
+
+// battery-drain: nearly stopped (2 cases) — the KB article deflection story
+for (let i = 0; i < 2; i++) {
+  month2.push(makeBatteryCase(randomDate(MONTH2_START, MONTH2_END)));
+}
+
+// firmware-freeze: hard spike (26 cases)
+for (let i = 0; i < 26; i++) {
+  month2.push(makeFirmwareCase(randomDate(MONTH2_START, MONTH2_END)));
+}
+
+// shipping-delay: none — resolved operationally
+
+// pairing-failure: brand-new topic (10 cases)
+for (let i = 0; i < 10; i++) {
+  month2.push(makePairingCase(randomDate(MONTH2_START, MONTH2_END)));
+}
+
+// compressor-noise: just-emerging early signal — 5 cases, all in July only (zero before)
+for (let i = 0; i < 5; i++) {
+  month2.push(makeCompressorCase(randomDate(new Date("2026-07-01"), MONTH2_END)));
+}
+
+// noise: 25 cases
+for (let i = 0; i < 25; i++) {
+  month2.push(makeNoiseCase(randomDate(MONTH2_START, MONTH2_END)));
+}
+
+// --- Write CSVs -----------------------------------------------------------
+
+const headers = ["CaseNumber", "Subject", "Description", "Product", "Country", "Priority", "Status", "CreatedDate", "Topic"];
 function csvEscape(v) {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
-const lines = [headers.join(",")];
-for (const c of cases) {
-  lines.push(headers.map((h) => csvEscape(c[h])).join(","));
+function writeCases(cases, outPath) {
+  // Sort by date for realism, then re-number so case numbers roughly follow dates.
+  cases.sort((a, b) => (a.CreatedDate < b.CreatedDate ? -1 : 1));
+  let n = caseCounter;
+  for (const c of cases) c.CaseNumber = String(n++).padStart(8, "0");
+  caseCounter = n;
+
+  const lines = [headers.join(",")];
+  for (const c of cases) lines.push(headers.map((h) => csvEscape(c[h])).join(","));
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, lines.join("\n"), "utf8");
+  console.log(`Wrote ${cases.length} cases to ${outPath}`);
 }
 
-const outPath = path.join(process.cwd(), "public", "demo-cases.csv");
-fs.mkdirSync(path.dirname(outPath), { recursive: true });
-fs.writeFileSync(outPath, lines.join("\n"), "utf8");
-console.log(`Wrote ${cases.length} cases to ${outPath}`);
+writeCases(month1, path.join(process.cwd(), "public", "demo-cases-month1.csv"));
+writeCases(month2, path.join(process.cwd(), "public", "demo-cases-month2-delta.csv"));

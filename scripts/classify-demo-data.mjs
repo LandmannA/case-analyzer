@@ -1,7 +1,12 @@
-// One-off script: pre-classifies public/demo-cases.csv and writes
-// public/demo-cases-classified.csv with category/root_cause/sentiment/urgency
-// baked in, so the public demo can show a fully analyzed dataset with zero
-// live API calls. Run with: node scripts/classify-demo-data.mjs
+// One-off script: pre-classifies both demo data waves and writes
+// public/demo-cases-month1-classified.csv and demo-cases-month2-classified.csv
+// with category/root_cause/sentiment/urgency baked in, so the public demo can
+// show fully analyzed datasets with zero live API calls. Also writes
+// demo-summary-month1.json (AI "top emerging issues" over Month 1 alone) and
+// demo-summary-month2.json (over the combined Month 1 + Month 2 dataset).
+// The ground-truth `Topic` column passes through untouched — it is never
+// sent to the model, only used later by the dashboard's evolution panel.
+// Run with: node scripts/classify-demo-data.mjs
 // Requires ANTHROPIC_API_KEY in the environment (loaded from .env.local).
 
 import fs from "node:fs";
@@ -88,26 +93,95 @@ function csvEscape(v) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function buildSummaryPrompt(cases) {
-  const rows = cases
-    .map((c) => `- ${c.CreatedDate} | ${c.category} | ${c.sentiment}/${c.urgency} | ${c.root_cause}`)
-    .join("\n");
-  return `You are a Revenue Operations analyst reviewing already-classified customer support cases for a consumer electronics company. Each line below is one case: date, category, sentiment/urgency, and a short root cause.
+// Keep in sync with TOPIC_LABELS in app/evolution.ts — the "Top emerging
+// issues" summary is grounded in the same ground-truth Topic field the
+// dashboard's Evolution table and Suggested Topics use, so the AI-written
+// narrative and the deterministic trend table always agree on what's
+// actually happening in the data.
+const TOPIC_LABELS = {
+  "battery-drain": "AeroSnap X200 battery drain",
+  "firmware-freeze": "Lumina OLED firmware freeze",
+  "shipping-delay": "Rotterdam shipping delays",
+  "pairing-failure": "SoundWave Bluetooth pairing failures",
+  "compressor-noise": "FrostCore compressor noise",
+};
+// Keep in sync with PUBLISHED_ARTICLES in app/evolution.ts.
+const PUBLISHED_ARTICLES = {
+  "battery-drain": "2026-06",
+};
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function monthKey(dateStr) {
+  return dateStr.slice(0, 7);
+}
+function monthLabel(key) {
+  const m = Number(key.split("-")[1]);
+  return MONTH_NAMES[m - 1] ?? key;
+}
 
-Write the "Top emerging issues" for a leadership dashboard: the 3-5 most notable patterns (spikes, growing trends, or clusters worth acting on). For each: a short bold-worthy headline, then one or two sentences in plain business language explaining what's happening and why it matters. No technical jargon, no case IDs. Base it only on patterns actually visible in the data below — do not invent issues.
+// Mirrors the trend classification in app/evolution.ts's buildMonthlySeries,
+// just enough to decide what belongs in "Top emerging issues" — a fully
+// resolved topic with no published article is stale news, not "emerging".
+function classifyTrend(counts) {
+  const firstActive = counts.findIndex((n) => n > 0);
+  const lastActive = counts.length - 1 - [...counts].reverse().findIndex((n) => n > 0);
+  if (counts[counts.length - 1] === 0 && lastActive < counts.length - 1) return "resolved";
+  if (firstActive >= counts.length - 2) return "new";
+  const half = Math.max(1, Math.floor(counts.length / 2));
+  const earlyAvg = counts.slice(0, half).reduce((a, b) => a + b, 0) / half;
+  const recentAvg = counts.slice(-half).reduce((a, b) => a + b, 0) / half;
+  if (recentAvg > earlyAvg * 1.5) return "rising";
+  if (recentAvg < earlyAvg * 0.5) return "falling";
+  return "steady";
+}
+
+function buildTopicStats(rows) {
+  const months = [...new Set(rows.filter((r) => r.CreatedDate).map((r) => monthKey(r.CreatedDate)))].sort();
+  const byTopic = new Map();
+  for (const r of rows) {
+    if (!r.Topic || r.Topic === "noise" || !r.CreatedDate) continue;
+    if (!byTopic.has(r.Topic)) byTopic.set(r.Topic, months.map(() => 0));
+    const idx = months.indexOf(monthKey(r.CreatedDate));
+    if (idx >= 0) byTopic.get(r.Topic)[idx]++;
+  }
+  const stats = [];
+  for (const [topic, counts] of byTopic) {
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (total === 0) continue;
+    const trend = classifyTrend(counts);
+    // Drop fully-resolved topics with no published article to point to —
+    // they're old news, not a "top emerging issue" for a leadership dashboard.
+    if (trend === "resolved" && !PUBLISHED_ARTICLES[topic]) continue;
+    stats.push({ topic, label: TOPIC_LABELS[topic] ?? topic, months, counts, total, trend });
+  }
+  stats.sort((a, b) => b.counts[b.counts.length - 1] - a.counts[a.counts.length - 1]);
+  return stats;
+}
+
+function buildSummaryPrompt(topicStats) {
+  const lines = topicStats
+    .map((s) => {
+      const byMonth = s.months.map((m, i) => `${monthLabel(m)}: ${s.counts[i]}`).join(", ");
+      const published = PUBLISHED_ARTICLES[s.topic];
+      const articleNote = published ? ` — a knowledge article for this issue was published in ${monthLabel(published)}` : "";
+      return `- ${s.label} (total ${s.total} cases) — monthly counts: ${byMonth}${articleNote}`;
+    })
+    .join("\n");
+  return `You are a Revenue Operations analyst writing the "Top emerging issues" section of a leadership dashboard for a consumer electronics support team.
+
+Below is monthly case-volume data for each recurring issue currently being tracked (already filtered to only the ones worth a leadership's attention — nothing stale). For EACH issue listed, write one entry: a short bold-worthy headline, then one or two sentences in plain business language describing the trend (growing, emerging, resolved, steady) and why it matters. If an issue notes a published knowledge article, credit it for the drop in volume. Base this ONLY on the numbers and notes given — do not invent additional issues, root causes, or facts not implied by the data below. Order entries by the most urgent/notable first.
 
 Respond with ONLY a JSON array (no prose, no markdown fences), each item shaped as:
 {"headline": "<short headline>", "detail": "<1-2 sentence explanation>"}
 
-Cases:
-${rows}`;
+Issues:
+${lines}`;
 }
 
-async function generateSummary(cases) {
+async function generateSummary(topicStats) {
   const message = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    messages: [{ role: "user", content: buildSummaryPrompt(cases) }],
+    messages: [{ role: "user", content: buildSummaryPrompt(topicStats) }],
   });
   const text = message.content
     .filter((b) => b.type === "text")
@@ -118,13 +192,7 @@ async function generateSummary(cases) {
   return JSON.parse(jsonMatch[0]);
 }
 
-async function main() {
-  const inPath = path.join(process.cwd(), "public", "demo-cases.csv");
-  const outPath = path.join(process.cwd(), "public", "demo-cases-classified.csv");
-  const summaryOutPath = path.join(process.cwd(), "public", "demo-summary.json");
-  const csvText = fs.readFileSync(inPath, "utf8");
-  const { data: rows, meta } = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-
+async function classifyRows(rows) {
   const batches = chunk(rows, BATCH_SIZE);
   const classifications = new Map();
   let done = 0;
@@ -145,10 +213,14 @@ async function main() {
     done += batch.length;
     console.log(`Classified ${done}/${rows.length}`);
   }
+  return classifications;
+}
 
-  const headers = [...meta.fields, "category", "root_cause", "sentiment", "urgency"];
+function writeClassifiedCsv(rows, fields, classifications, outPath) {
+  const headers = [...fields, "category", "root_cause", "sentiment", "urgency"];
   const lines = [headers.join(",")];
   let unclassified = 0;
+  const fullRows = [];
   for (const row of rows) {
     const c = classifications.get(row.CaseNumber);
     if (!c) unclassified++;
@@ -159,25 +231,51 @@ async function main() {
       sentiment: c?.sentiment ?? "Neutral",
       urgency: c?.urgency ?? "Low",
     };
+    fullRows.push(full);
     lines.push(headers.map((h) => csvEscape(full[h])).join(","));
   }
-
   fs.writeFileSync(outPath, lines.join("\n"), "utf8");
   console.log(`Wrote ${rows.length} classified cases to ${outPath} (${unclassified} unclassified)`);
+  return fullRows;
+}
 
-  const summaryInput = rows.map((row) => {
-    const c = classifications.get(row.CaseNumber);
-    return {
-      CreatedDate: row.CreatedDate,
-      category: c?.category ?? "Unclassified",
-      sentiment: c?.sentiment ?? "Neutral",
-      urgency: c?.urgency ?? "Low",
-      root_cause: c?.root_cause ?? "—",
-    };
-  });
-  const issues = await generateSummary(summaryInput);
-  fs.writeFileSync(summaryOutPath, JSON.stringify({ issues }, null, 2), "utf8");
-  console.log(`Wrote ${issues.length} top emerging issues to ${summaryOutPath}`);
+async function writeSummary(fullRows, outPath) {
+  const topicStats = buildTopicStats(fullRows);
+  const issues = await generateSummary(topicStats);
+  fs.writeFileSync(outPath, JSON.stringify({ issues }, null, 2), "utf8");
+  console.log(`Wrote ${issues.length} top emerging issues to ${outPath}`);
+}
+
+function readCsv(inPath) {
+  const csvText = fs.readFileSync(inPath, "utf8");
+  return Papa.parse(csvText, { header: true, skipEmptyLines: true });
+}
+
+async function main() {
+  const publicDir = path.join(process.cwd(), "public");
+
+  console.log("--- Month 1 ---");
+  const { data: month1Rows, meta: month1Meta } = readCsv(path.join(publicDir, "demo-cases-month1.csv"));
+  const month1Classifications = await classifyRows(month1Rows);
+  const month1Full = writeClassifiedCsv(
+    month1Rows,
+    month1Meta.fields,
+    month1Classifications,
+    path.join(publicDir, "demo-cases-month1-classified.csv")
+  );
+  await writeSummary(month1Full, path.join(publicDir, "demo-summary-month1.json"));
+
+  console.log("--- Month 2 ---");
+  const { data: month2Rows, meta: month2Meta } = readCsv(path.join(publicDir, "demo-cases-month2-delta.csv"));
+  const month2Classifications = await classifyRows(month2Rows);
+  const month2Full = writeClassifiedCsv(
+    month2Rows,
+    month2Meta.fields,
+    month2Classifications,
+    path.join(publicDir, "demo-cases-month2-classified.csv")
+  );
+  // The Month 2 summary reflects what's on screen once Month 2 is loaded: the combined dataset.
+  await writeSummary([...month1Full, ...month2Full], path.join(publicDir, "demo-summary-month2.json"));
 }
 
 main();

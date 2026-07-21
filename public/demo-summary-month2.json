@@ -1,0 +1,20 @@
+{
+  "issues": [
+    {
+      "headline": "Lumina OLED firmware freeze accelerating",
+      "detail": "Cases surged from 4 in May to 18 in June before declining to 8 in July, indicating a significant quality issue affecting recent production batches. This remains the highest-volume emerging problem and warrants immediate investigation into firmware root cause and potential recall scope."
+    },
+    {
+      "headline": "FrostCore compressor noise newly detected",
+      "detail": "All 5 reported cases appeared in July with no prior history, suggesting either a recent manufacturing defect or newly emerging field failure in this product line. Early monitoring is critical to determine if this represents an isolated batch issue or systemic problem."
+    },
+    {
+      "headline": "SoundWave Bluetooth pairing failures declining after spike",
+      "detail": "Cases peaked at 7 in June and dropped to 3 in July, indicating the issue may be stabilizing or self-resolving. Continued monitoring is needed to confirm the trend before closing."
+    },
+    {
+      "headline": "AeroSnap X200 battery drain resolved",
+      "detail": "The June knowledge article publication correlates with elimination of cases in July (0 reported), suggesting the self-service resource successfully addressed customer concerns. This issue can be deprioritized."
+    }
+  ]
+}
