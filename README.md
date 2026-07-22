@@ -1,6 +1,30 @@
 # Salesforce Case Analyzer
 
-*(Business summary, live demo link, and setup instructions land here in a later phase. This file currently covers data security, since that's built and verified.)*
+**Live demo:** _add your Vercel URL here after deploying (see "Deploy your own copy" below)_
+
+## The problem
+
+Support teams drown in unstructured cases. A Head of Customer Service with thousands of open tickets and no dedicated analyst can't easily answer the questions that actually matter: *What are customers contacting us about? What's trending up this month? Where should we invest in a knowledge article to stop repeat tickets before they happen?*
+
+## What this tool does
+
+Upload a CSV export of support cases (or click "Load demo data" to see it work instantly on a synthetic dataset) and the app:
+
+1. **Classifies every case with AI** — category, root cause, sentiment, and urgency, running server-side through the Claude API.
+2. **Builds a dashboard** — case volume by category, volume trends over time, sentiment distribution, and an AI-written "Top emerging issues" summary in plain business language.
+3. **Drafts knowledge articles** — pick a category and generate both an internal agent-facing article and a customer-facing help article, ready to copy and use.
+4. **Exports the results** — original case data plus every AI-generated column, as a CSV you can hand to a team or drop into Salesforce.
+
+A stranger can load the demo data and understand the value in under a minute — no login, no setup.
+
+**All data in this project — the demo dataset and every example — is synthetic.** No real customer, case, or personal data is used anywhere in this app or repo.
+
+## Tech stack
+
+- **Next.js (React)** — single project, API routes double as the backend.
+- **Claude API (Anthropic)** — case classification, trend summaries, and knowledge article generation.
+- **Recharts** — dashboard charts.
+- Deployed free on **Vercel**.
 
 ## Data Security
 
@@ -27,3 +51,24 @@ The version above is intentionally minimal so it's cheap and simple to run as a 
 5. **EU (or regional) data residency.** For companies with EU customer data, the app and its AI calls would be pinned to EU-region infrastructure (e.g., Bedrock/Vertex/Azure AI's EU regions) so data never crosses into other jurisdictions, satisfying GDPR data-residency expectations.
 
 None of this is needed for a public portfolio demo running on synthetic data — it's documented here to show the deployment path a real enterprise rollout would take.
+
+## Running it yourself locally
+
+1. Clone the repo and install dependencies: `npm install`
+2. Create a file named `.env.local` in the project root with:
+   ```
+   ANTHROPIC_API_KEY=your-key-from-console.anthropic.com
+   ```
+3. Run `npm run dev` and open `http://localhost:3000`.
+
+## Deploy your own copy (free, on Vercel)
+
+See the step-by-step instructions below — this doesn't require any coding.
+
+### Note on the "real integration" story
+
+This app takes a CSV export as its input rather than connecting live to a Salesforce org via API/OAuth. In a real deployment, that CSV would instead come from a scheduled Salesforce SOQL export (or Salesforce's Bulk API) rather than a manual download — the classification and dashboard logic downstream would be identical.
+
+## Scope note
+
+This is a portfolio project built to demonstrate AI-powered Revenue Operations thinking, not a production tool. It intentionally does not include user accounts, a live Salesforce connection, or persistent storage — see the Enterprise Architecture appendix above for how those would be added for real internal use.
