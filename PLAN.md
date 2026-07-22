@@ -65,6 +65,19 @@
 **Prompt to paste into Claude Code:**
 > Prepare this for public sharing: (1) write a README that leads with the business problem and demo link, then the tech stack, and explicitly states all data is synthetic; (2) give me step-by-step beginner instructions to deploy this to Vercel for free, including where to enter the ANTHROPIC_API_KEY environment variable in the Vercel dashboard; (3) do a final review pass for anything that would embarrass me in a public repo (secrets, TODOs, placeholder text, real-looking personal data).
 
+**Status:** README rewritten and committed; final review pass done (no secrets, TODOs, or placeholder text found). Remaining steps below require your own GitHub/Vercel accounts, so Claude Code can't do them for you.
+
+**Your to-dos (do these when ready):**
+- [ ] **Push to GitHub.** Go to github.com → **+** → **New repository** → name it `case-analyzer`, keep it **Public**, don't check any of the README/gitignore boxes. Click **Create repository**, then copy the `git remote add origin ...` and `git push -u origin master` commands it shows you and run them in this project folder.
+- [ ] **Deploy to Vercel.** Go to vercel.com → **Log in** → **Continue with GitHub** → authorize. Click **Add New** → **Project** → **Import** your `case-analyzer` repo.
+- [ ] Before clicking Deploy, expand **Environment Variables** and add all three:
+  - `ANTHROPIC_API_KEY` → your key from console.anthropic.com
+  - `NEXT_PUBLIC_DEMO_MODE` → `true`
+  - `DEMO_MODE` → `true`
+  (this is the cost-safety gate already built into the app — it makes the public link demo-only so it can't run up your API bill)
+- [ ] Click **Deploy**. Wait ~1 minute for the live URL (e.g. `case-analyzer-yourname.vercel.app`).
+- [ ] Tell Claude Code the URL so it can add it to the README's "Live demo" line and commit that.
+
 **Verify before moving on:**
 - [ ] The live Vercel URL works on your phone and a friend's computer, not just your machine.
 - [ ] Full demo flow on the live site: load demo data → analyze → dashboard → generate article. Time it; it should feel snappy enough for a screen recording.
