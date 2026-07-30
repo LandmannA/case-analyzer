@@ -4,8 +4,8 @@
     --ink: #1a1d24;
     --muted: #5b6270;
     --line: #e3e6ec;
-    --amber: #d9822b;
-    --amber-deep: #b8631a;
+    --accent: #4A79AC;
+    --accent-deep: #1F4E86;
     --paper: #ffffff;
     --panel: #f7f8fa;
   }
@@ -21,7 +21,7 @@
     line-height: 1.5;
   }
   .eyebrow {
-    color: var(--amber-deep);
+    color: var(--accent-deep);
     font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -56,7 +56,7 @@
     padding-top: 4px;
   }
   .top-row .links a {
-    color: var(--amber-deep);
+    color: var(--accent-deep);
     text-decoration: none;
     font-weight: 600;
   }
@@ -67,7 +67,7 @@
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--amber-deep);
+    color: var(--accent-deep);
     margin: 0 0 10px;
     font-weight: 700;
   }
@@ -111,8 +111,8 @@
     height: 34px;
     border-radius: 50%;
     background: var(--paper);
-    border: 2px solid var(--amber);
-    color: var(--amber-deep);
+    border: 2px solid var(--accent);
+    color: var(--accent-deep);
     font-weight: 800;
     font-size: 13px;
     display: flex;
@@ -144,18 +144,16 @@
   .value-item .headline {
     font-size: 15px;
     font-weight: 700;
-    position: relative;
-    padding-left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
   }
-  .value-item .headline::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 4px;
+  .value-item .headline .dot {
+    flex: none;
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--amber);
+    background: var(--accent);
   }
   .value-item .body {
     font-size: 13.5px;
@@ -255,19 +253,19 @@
   <h2>Why It's Worth Using</h2>
   <div class="value-list">
     <div class="value-item">
-      <div class="headline">No analyst required</div>
+      <div class="headline"><span class="dot"></span>No analyst required</div>
       <div class="body">Classifies hundreds of cases in seconds — work that would otherwise take a person days to triage by hand.</div>
     </div>
     <div class="value-item">
-      <div class="headline">Catches issues early</div>
+      <div class="headline"><span class="dot"></span>Catches issues early</div>
       <div class="body">Flags a new or accelerating problem the month it appears, not the month a customer escalates it.</div>
     </div>
     <div class="value-item">
-      <div class="headline">Turns insight into action</div>
+      <div class="headline"><span class="dot"></span>Turns insight into action</div>
       <div class="body">Doesn't stop at a chart — recommends the exact knowledge article to write next.</div>
     </div>
     <div class="value-item">
-      <div class="headline">Proves its own impact</div>
+      <div class="headline"><span class="dot"></span>Proves its own impact</div>
       <div class="body">Tracks case volume for a topic before and after its article is published, so the payoff is measurable.</div>
     </div>
   </div>
