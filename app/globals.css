@@ -217,6 +217,15 @@ body {
   color: var(--text);
   background: var(--glass-strong);
 }
+.dropzone.dropzone-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.dropzone.dropzone-disabled:hover {
+  border-color: var(--glass-border-strong);
+  color: var(--text-muted);
+  background: var(--glass);
+}
 
 .notice {
   margin-top: 20px;

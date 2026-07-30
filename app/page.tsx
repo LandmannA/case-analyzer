@@ -76,7 +76,9 @@ function parseCsv(csvText: string): { cases: Case[]; error?: string; capped?: bo
 const STEPS = [
   {
     title: "Load your cases",
-    detail: "Click “Load demo data” below, or upload your own Salesforce case export (.csv).",
+    detail: DEMO_MODE
+      ? "Click “Load demo data” below to see the tool in action with synthetic cases."
+      : "Click “Load demo data” below, or upload your own Salesforce case export (.csv).",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
@@ -352,22 +354,30 @@ export default function Home() {
           Load demo data
         </button>
         <div
-          className="dropzone"
-          onClick={() => fileInputRef.current?.click()}
+          className={DEMO_MODE ? "dropzone dropzone-disabled" : "dropzone"}
+          title={DEMO_MODE ? "Upload disabled in public demo — click \"Load demo data\" instead" : undefined}
+          onClick={() => {
+            if (DEMO_MODE) return;
+            fileInputRef.current?.click();
+          }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
+            if (DEMO_MODE) return;
             const file = e.dataTransfer.files[0];
             if (file) handleFile(file);
           }}
         >
-          ⬆ Upload a Salesforce case export (.csv) — click or drag &amp; drop
+          {DEMO_MODE
+            ? "⬆ Upload disabled in public demo — click “Load demo data” instead"
+            : "⬆ Upload a Salesforce case export (.csv) — click or drag & drop"}
         </div>
         <input
           ref={fileInputRef}
           type="file"
           accept=".csv,text/csv"
           style={{ display: "none" }}
+          disabled={DEMO_MODE}
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
