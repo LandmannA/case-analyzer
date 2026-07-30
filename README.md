@@ -1,6 +1,6 @@
 # Salesforce Case Analyzer
 
-**Live demo:** _add your Vercel URL here after deploying (see "Deploy your own copy" below)_
+**Live demo:** [case-analyzer-steel.vercel.app](https://case-analyzer-steel.vercel.app)
 
 ## The problem
 
