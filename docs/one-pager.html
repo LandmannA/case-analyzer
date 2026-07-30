@@ -82,62 +82,85 @@
     color: var(--ink);
   }
 
-  .steps {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
+  .pipeline {
+    position: relative;
+    display: flex;
+    padding-top: 4px;
   }
-  .step {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 12px 12px;
-    font-size: 12.5px;
+  .pipeline::before {
+    content: "";
+    position: absolute;
+    top: 21px;
+    left: 17px;
+    right: 17px;
+    height: 2px;
+    background: var(--line);
   }
-  .step .num {
-    display: inline-block;
-    width: 20px; height: 20px;
-    background: var(--amber);
-    color: white;
-    border-radius: 50%;
-    font-size: 11px;
-    font-weight: 700;
-    text-align: center;
-    line-height: 20px;
-    margin-bottom: 8px;
-  }
-  .step .title { font-weight: 700; margin-bottom: 3px; }
-  .step .desc { color: var(--muted); }
-
-  .benefits {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-  }
-  .benefit {
-    background: var(--panel);
-    border-radius: 10px;
-    padding: 16px 16px 18px;
+  .pipeline-item {
+    flex: 1;
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    text-align: center;
+    padding: 0 6px;
   }
-  .benefit .icon {
+  .pipeline-item .node {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
-    background: var(--amber);
+    border-radius: 50%;
+    background: var(--paper);
+    border: 2px solid var(--amber);
+    color: var(--amber-deep);
+    font-weight: 800;
+    font-size: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-bottom: 10px;
   }
-  .benefit .icon svg { width: 18px; height: 18px; stroke: white; }
-  .benefit .headline {
-    font-size: 14px;
+  .pipeline-item .title {
     font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 4px;
   }
-  .benefit .body {
-    font-size: 12.5px;
+  .pipeline-item .desc {
+    font-size: 11.5px;
     color: var(--muted);
+    line-height: 1.35;
+  }
+
+  .value-list {
+    border-top: 1px solid var(--line);
+  }
+  .value-item {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: 20px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .value-item .headline {
+    font-size: 15px;
+    font-weight: 700;
+    position: relative;
+    padding-left: 14px;
+  }
+  .value-item .headline::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+  }
+  .value-item .body {
+    font-size: 13.5px;
+    color: var(--muted);
+    padding-top: 1px;
   }
 
   .shot {
@@ -241,55 +264,51 @@
 
 <section>
   <h2>What It Does</h2>
-  <div class="steps">
-    <div class="step">
-      <div class="num">1</div>
-      <div class="title">Load cases</div>
-      <div class="desc">A CSV export of support tickets — or one click loads a synthetic demo set.</div>
+  <div class="pipeline">
+    <div class="pipeline-item">
+      <div class="node">1</div>
+      <div class="title">Load</div>
+      <div class="desc">CSV export, or one-click demo data</div>
     </div>
-    <div class="step">
-      <div class="num">2</div>
-      <div class="title">Analyzes &amp; classifies</div>
-      <div class="desc">Category, root cause, sentiment, and urgency — assigned automatically in seconds.</div>
+    <div class="pipeline-item">
+      <div class="node">2</div>
+      <div class="title">Classify</div>
+      <div class="desc">Category, cause, sentiment, urgency</div>
     </div>
-    <div class="step">
-      <div class="num">3</div>
-      <div class="title">Surfaces trends</div>
-      <div class="desc">Volume by category, sentiment mix, and a written summary of what's emerging.</div>
+    <div class="pipeline-item">
+      <div class="node">3</div>
+      <div class="title">Surface</div>
+      <div class="desc">Trends &amp; a written summary</div>
     </div>
-    <div class="step">
-      <div class="num">4</div>
-      <div class="title">Suggests articles</div>
-      <div class="desc">Recommends which knowledge article to publish next, based on the data.</div>
+    <div class="pipeline-item">
+      <div class="node">4</div>
+      <div class="title">Suggest</div>
+      <div class="desc">Which article to write next</div>
     </div>
-    <div class="step">
-      <div class="num">5</div>
-      <div class="title">Tracks impact</div>
-      <div class="desc">Measures how much published articles reduce related case volume over time.</div>
+    <div class="pipeline-item">
+      <div class="node">5</div>
+      <div class="title">Track</div>
+      <div class="desc">Case volume, before &amp; after</div>
     </div>
   </div>
 </section>
 
 <section>
   <h2>Why It's Worth Using</h2>
-  <div class="benefits">
-    <div class="benefit">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
+  <div class="value-list">
+    <div class="value-item">
       <div class="headline">No analyst required</div>
       <div class="body">Classifies hundreds of cases in seconds — work that would otherwise take a person days to triage by hand.</div>
     </div>
-    <div class="benefit">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg></div>
+    <div class="value-item">
       <div class="headline">Catches issues early</div>
       <div class="body">Flags a new or accelerating problem the month it appears, not the month a customer escalates it.</div>
     </div>
-    <div class="benefit">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+    <div class="value-item">
       <div class="headline">Turns insight into action</div>
       <div class="body">Doesn't stop at a chart — recommends the exact knowledge article to write next, and drafts it.</div>
     </div>
-    <div class="benefit">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+    <div class="value-item">
       <div class="headline">Proves its own impact</div>
       <div class="body">Tracks case volume for a topic before and after its article is published, so the payoff is measurable.</div>
     </div>
