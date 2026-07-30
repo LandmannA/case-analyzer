@@ -41,6 +41,7 @@ A web application that ingests an exported set of Salesforce support cases (CSV 
 
 ### Could have (Phase 3 — only if time permits)
 10. **"Ask your cases" chat** — natural-language Q&A over the analyzed dataset ("Which product line drives the most angry cases?").
+11. **Classification correction & steering loop.** Today the AI classifies every case using only bare label names (category/sentiment/urgency options) with no definitions, no examples, and no way for the user to influence its judgment — see section 4.4. Add the ability for Alex to review AI classifications in the case table, correct any that are wrong (change category/sentiment/urgency/root_cause on a case), and have those corrections feed back into future classification runs as guidance (few-shot examples) so the model's judgment converges toward Alex's own. This directly addresses the "how do I trust/control the AI's judgment" question a RevOps hiring manager would reasonably ask in a demo.
 
 ### Won't have (explicitly out of scope)
 - Live Salesforce API/OAuth connection (CSV export is the integration story for the demo; mention SOQL export in the README instead).
@@ -63,6 +64,12 @@ A web application that ingests an exported set of Salesforce support cases (CSV 
 - 150 synthetic cases generated once and stored as a static CSV in the repo (`/public/demo-cases.csv`).
 - Must feel real: varied products, countries, tones (some angry, some polite), dates spread over ~6 months, and 3–4 deliberately planted "trends" (e.g., a firmware issue spiking in the last month) so the dashboard has a story to tell.
 - Every synthetic name/email must be obviously fictional.
+
+### 4.4 Classification correction & steering (future — see section 3, item 11)
+- Currently `buildPrompt()` in `app/api/classify/route.ts` gives the model only the bare allowed-value lists for category/sentiment/urgency (e.g. "Positive/Neutral/Negative/Angry") with no definitions and no examples; the model infers the boundary between, say, "Negative" and "Angry" entirely on its own, and there is no user-facing way to change this today.
+- When built: the case table gets an edit affordance so Alex can correct a case's category, sentiment, urgency, or root_cause after AI classification.
+- Corrected cases are stored (locally to the session, consistent with the no-persistence security model in section 7.1) and injected into `buildPrompt()` as few-shot examples on subsequent classification runs, so the model's behavior converges toward Alex's corrections over time.
+- Stretch: surface simple editable definitions per label (e.g. "Angry = profanity, ALL CAPS, or explicit threat to cancel") that get included in the prompt verbatim, giving direct control even before any corrections exist.
 
 ## 5. Non-functional requirements
 - **Stack:** Next.js (React) single project with API routes; charts via Recharts; deployable free on Vercel.

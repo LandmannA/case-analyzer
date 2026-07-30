@@ -17,7 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import type { Case } from "./page";
-import { buildMonthlySeries, monthKey, monthLabel, publishedMonth, type Trend } from "./evolution";
+import { buildMonthlySeries, monthKey, monthLabel, publishedMonth, suggestedTopics, type Trend } from "./evolution";
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
@@ -33,32 +33,32 @@ const CATEGORY_ORDER = [
   "Other",
 ];
 const CATEGORY_COLORS: Record<string, string> = {
-  "Product Defect": "#2a78d6",
-  "How-To Question": "#008300",
-  Billing: "#e87ba4",
-  "Shipping/Logistics": "#eda100",
-  Warranty: "#1baf7a",
-  "Software/Firmware": "#eb6834",
-  Other: "#4a3aa7",
+  "Product Defect": "#f4685d",
+  "How-To Question": "#3dc9b0",
+  Billing: "#e8779e",
+  "Shipping/Logistics": "#f4b740",
+  Warranty: "#8fdd5e",
+  "Software/Firmware": "#4a90e2",
+  Other: "#8b7fe8",
 };
 
 const SENTIMENT_ORDER = ["Positive", "Neutral", "Negative", "Angry"];
 const SENTIMENT_COLORS: Record<string, string> = {
-  Positive: "#0ca30c",
-  Neutral: "#898781",
-  Negative: "#fab219",
-  Angry: "#d03b3b",
+  Positive: "#8fdd5e",
+  Neutral: "#9aa1b2",
+  Negative: "#f4b740",
+  Angry: "#f4685d",
 };
 
 const TOPIC_COLORS: Record<string, string> = {
-  "battery-drain": "#1baf7a",
-  "firmware-freeze": "#eb6834",
-  "shipping-delay": "#eda100",
-  "pairing-failure": "#2a78d6",
+  "battery-drain": "#8fdd5e",
+  "firmware-freeze": "#f4685d",
+  "shipping-delay": "#f4b740",
+  "pairing-failure": "#4a90e2",
 };
 
-const GRID_COLOR = "#e1e0d9";
-const AXIS_COLOR = "#898781";
+const GRID_COLOR = "rgba(255, 255, 255, 0.08)";
+const AXIS_COLOR = "#9aa1b2";
 
 // Statistical trend alone can't say *why* volume dropped — only that it did.
 // We only claim the knowledge-article generator gets the credit for topics
@@ -319,9 +319,7 @@ export default function Dashboard({
   const negativeCount = cases.filter((c) => c.sentiment === "Negative" || c.sentiment === "Angry").length;
   const negativePct = totalCases > 0 ? Math.round((negativeCount / totalCases) * 100) : 0;
   const highUrgencyCount = cases.filter((c) => c.urgency === "High").length;
-  const attentionTopics = evolutionRows
-    .filter((r) => (r.trend === "new" || r.trend === "rising") && !publishedMonth(r.topicKey))
-    .map((r) => r.topicKey);
+  const attentionTopics = isDemoDataset ? suggestedTopics(cases).map((s) => s.topicKey) : [];
 
   return (
     <div className="dashboard">
@@ -335,22 +333,22 @@ export default function Dashboard({
       <div className="kpi-row">
         <KpiTile
           icon={<StackIcon />}
-          iconBg="#dfe0ff"
-          iconColor="var(--accent)"
+          iconBg="rgba(74, 144, 226, 0.16)"
+          iconColor="#4a90e2"
           value={String(totalCases)}
           label="Cases analyzed"
         />
         <KpiTile
           icon={<AlertIcon />}
-          iconBg="#fce4bb"
-          iconColor="var(--warning)"
+          iconBg="rgba(244, 183, 64, 0.16)"
+          iconColor="#f4b740"
           value={`${negativePct}%`}
           label="Negative or angry sentiment"
         />
         <KpiTile
           icon={<FlameIcon />}
-          iconBg="#fbd2d2"
-          iconColor="var(--critical)"
+          iconBg="rgba(244, 104, 93, 0.16)"
+          iconColor="#f4685d"
           value={String(highUrgencyCount)}
           label="High-urgency cases"
           onClick={onFilterHighUrgency}
@@ -358,8 +356,8 @@ export default function Dashboard({
         {isDemoDataset && (
           <KpiTile
             icon={<TrendIcon />}
-            iconBg="#c9f1c9"
-            iconColor="var(--good)"
+            iconBg="rgba(143, 221, 94, 0.16)"
+            iconColor="#8fdd5e"
             value={String(attentionTopics.length)}
             label="Topics needing an article"
             onClick={
@@ -382,12 +380,12 @@ export default function Dashboard({
                 type="category"
                 dataKey="category"
                 width={140}
-                tick={{ fill: "#52514e", fontSize: 12 }}
+                tick={{ fill: "#f5f6fa", fontSize: 12 }}
                 axisLine={{ stroke: GRID_COLOR }}
                 tickLine={false}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(79,70,229,0.06)" }} />
-              <Bar dataKey="count" name="Cases" fill="var(--accent)" radius={[0, 4, 4, 0]} maxBarSize={20} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(74,144,226,0.08)" }} />
+              <Bar dataKey="count" name="Cases" fill="#4a90e2" radius={[0, 8, 8, 0]} maxBarSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -405,7 +403,7 @@ export default function Dashboard({
                     innerRadius={58}
                     outerRadius={82}
                     paddingAngle={2}
-                    stroke="#fff"
+                    stroke="#0b0e14"
                     strokeWidth={2}
                   >
                     {sentimentData.map((entry) => (
@@ -451,7 +449,7 @@ export default function Dashboard({
               <Tooltip content={<CustomTooltip />} />
               <Legend
                 iconType="plainline"
-                wrapperStyle={{ fontSize: 12, color: "#52514e" }}
+                wrapperStyle={{ fontSize: 12, color: "#9aa1b2" }}
               />
               {activeCategories.map((cat) => (
                 <Line
@@ -462,7 +460,7 @@ export default function Dashboard({
                   stroke={CATEGORY_COLORS[cat]}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff" }}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: "#0b0e14" }}
                 />
               ))}
             </LineChart>
@@ -497,7 +495,7 @@ export default function Dashboard({
                   return (
                     <tr key={row.topicKey}>
                       <td className="evolution-topic">
-                        <span className="evolution-dot" style={{ background: TOPIC_COLORS[row.topicKey] ?? "#898781" }} />
+                        <span className="evolution-dot" style={{ background: TOPIC_COLORS[row.topicKey] ?? "#9aa1b2" }} />
                         {row.label}
                       </td>
                       {row.counts.map((count, i) => (

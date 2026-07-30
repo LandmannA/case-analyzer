@@ -90,6 +90,18 @@
 3. Publish the launch post. Structure: the business pain (2 lines) → what the tool does (3 lines) → one surprising insight it found in the demo data → what you learned building it with AI → link. End with a question to invite comments.
 4. Update your profile's current-role description and About to change "currently building" to "built" with the link.
 
+## Phase 7 — Classification correction & steering loop (future)
+
+**Why:** today the AI classifies every case using only bare label names (see REQUIREMENTS.md section 4.4) — no definitions, no examples, no way for Alex to influence its judgment. This phase gives Alex a way to correct the AI and have it learn from those corrections, which is also a strong interview talking point ("here's how I keep the model accountable to my own judgment, not a black box").
+
+**Prompt to paste into Claude Code:**
+> Implement REQUIREMENTS.md section 4.4 / item 11: let me correct an AI-classified case's category, sentiment, urgency, or root_cause directly in the case table (edit-in-place is fine). Store corrections for the current session only (no persistence, per section 7.1) and feed them into `buildPrompt()` in app/api/classify/route.ts as few-shot examples for any subsequent classification calls in that session, so the model's judgment converges toward my corrections. Keep the UI consistent with the existing dark glass design system in DESIGN.md.
+
+**Verify before moving on:**
+- [ ] Correcting a case in the table visibly updates its classification immediately.
+- [ ] Re-running "Analyze cases" (or classifying a new batch) on similar cases shows the model's output shifting toward the corrected pattern.
+- [ ] Refreshing the page clears corrections — confirms no persistence was introduced (still true to the security story in section 7).
+
 ## If you get stuck (any phase)
 
 Paste the exact error message into Claude Code and say: "I got this error when [what you were doing]. Diagnose the cause first and explain it to me in plain language before fixing anything." If a session goes badly sideways, it's cheaper to say "revert the changes from this session" than to keep patching — Claude Code can use git to undo work if you ask it to commit at the end of each successful phase (CLAUDE.md instructs it to do this).

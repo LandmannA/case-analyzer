@@ -47,6 +47,7 @@ export type TopicRow = {
   counts: number[];
   total: number;
   trend: Trend;
+  firstActiveIdx: number;
 };
 
 export function buildMonthlySeries(cases: Case[]): { months: string[]; rows: TopicRow[] } {
@@ -90,6 +91,7 @@ export function buildMonthlySeries(cases: Case[]): { months: string[]; rows: Top
       counts,
       total,
       trend,
+      firstActiveIdx: firstActive,
     });
   }
 
@@ -139,29 +141,72 @@ export type SuggestedTopic = {
   recentCount: number;
 };
 
+function average(nums: number[]): number {
+  return nums.length === 0 ? 0 : nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+// Three independent rules decide whether a topic is flagged as needing a
+// knowledge article. A topic qualifies if ANY rule fires:
+//
+//   A. Brand new this month, and louder than a typical new topic (its first
+//      month beats the average first-month volume of every other topic).
+//   B. First appeared within the last 4 months, and its latest month is
+//      more than 30% above the average of its own earlier months.
+//   C. First appeared within the last 5 months, and has increased (or held)
+//      every month since, with a net rise from its first month to its last.
+//
+// A topic that has already peaked and is now declining (e.g. spiked, then
+// fell) deliberately does not qualify under any rule — it already got its
+// moment; the point is to catch what's still climbing.
 export function suggestedTopics(cases: Case[]): SuggestedTopic[] {
   const { rows } = buildMonthlySeries(cases);
+  const unpublished = rows.filter((r) => !publishedMonth(r.topicKey));
+  const firstMonthVolumes = rows.map((r) => r.counts[r.firstActiveIdx]);
+
   const suggestions: SuggestedTopic[] = [];
 
-  for (const row of rows) {
-    if (row.trend !== "rising" && row.trend !== "new") continue;
-    if (publishedMonth(row.topicKey)) continue;
-    const recentSpan = Math.min(2, row.counts.length);
-    const recentCount = row.counts.slice(-recentSpan).reduce((a, b) => a + b, 0);
-    if (recentCount < 3) continue;
+  for (const row of unpublished) {
+    const { counts, firstActiveIdx } = row;
+    const lastIdx = counts.length - 1;
+    const ageMonths = lastIdx - firstActiveIdx + 1;
+    const latest = counts[lastIdx];
+    let reason: string | null = null;
 
-    const recentMonths = row.months.slice(-recentSpan).map(monthLabel).join("–");
-    let reason: string;
-    if (row.trend === "new") {
-      reason = `First appeared in ${monthLabel(row.months[row.months.findIndex((_, i) => row.counts[i] > 0)])}, ${row.total} cases since. New topic, no article exists yet.`;
-    } else {
-      const earlySpan = Math.min(2, row.counts.length);
-      const earlyCount = row.counts.slice(0, earlySpan).reduce((a, b) => a + b, 0);
-      const earlyMonths = row.months.slice(0, earlySpan).map(monthLabel).join("–");
-      reason = `${earlyCount} cases in ${earlyMonths} → ${recentCount} cases in ${recentMonths}. Growing fast, no article yet.`;
+    // Rule A: brand new this month, louder than a typical new topic.
+    if (firstActiveIdx === lastIdx) {
+      const othersFirstMonths = rows
+        .filter((r) => r.topicKey !== row.topicKey)
+        .map((r) => r.counts[r.firstActiveIdx]);
+      const baseline = average(othersFirstMonths.length > 0 ? othersFirstMonths : firstMonthVolumes);
+      if (baseline > 0 && latest > baseline) {
+        reason = `New this month (${monthLabel(row.months[lastIdx])}) with ${latest} cases — above the ${baseline.toFixed(1)}-case average for a brand-new topic.`;
+      }
     }
 
-    suggestions.push({ topicKey: row.topicKey, label: row.label, reason, recentCount });
+    // Rule B: appeared within the last 4 months; latest month >30% above
+    // the average of its own earlier months.
+    if (!reason && ageMonths <= 4 && lastIdx > firstActiveIdx) {
+      const earlier = counts.slice(firstActiveIdx, lastIdx);
+      const earlierAvg = average(earlier);
+      if (earlierAvg > 0 && latest > earlierAvg * 1.3) {
+        const pct = Math.round(((latest - earlierAvg) / earlierAvg) * 100);
+        reason = `${monthLabel(row.months[lastIdx])}: ${latest} cases, ${pct}% above its ${earlierAvg.toFixed(1)}-case average over the prior ${earlier.length} month${earlier.length > 1 ? "s" : ""}.`;
+      }
+    }
+
+    // Rule C: appeared within the last 5 months, never dropped month over
+    // month, with a net increase from first to last.
+    if (!reason && ageMonths <= 5 && lastIdx > firstActiveIdx) {
+      const window = counts.slice(firstActiveIdx);
+      const steady = window.every((n, i) => i === 0 || n >= window[i - 1]);
+      if (steady && window[window.length - 1] > window[0]) {
+        reason = `Steady increase over ${ageMonths} months: ${window[0]} → ${window[window.length - 1]} cases, never dropping.`;
+      }
+    }
+
+    if (reason) {
+      suggestions.push({ topicKey: row.topicKey, label: row.label, reason, recentCount: latest });
+    }
   }
 
   return suggestions.sort((a, b) => b.recentCount - a.recentCount);
